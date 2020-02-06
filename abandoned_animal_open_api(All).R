@@ -9,7 +9,7 @@ service_key <-'15PKRVa0527Ap7dvKbQOvC979eprNyZLi5a%2F4RNdtTOGAHUxQ0IqE%2FkfGLgMA
 url <- 'http://openapi.animal.go.kr/openapi/service/rest/abandonmentPublicSrvc/abandonmentPublic?'
 
 #검색 시작일
-bgnde = '20140101'
+bgnde = '20150101'
 
 #축종코드 417000 = 개, 422400 = 묘
 upkind = c('417000','422400')
@@ -17,7 +17,8 @@ upkind = c('417000','422400')
 #시도코드 6110000 = 서울특별시
 uprcd = c('6110000','6260000','6270000','6280000','6290000',
           '5690000','6300000','6310000','6410000',
-          '6420000')
+          '6420000','6430000','6440000','6450000','6460000','6470000',
+          '6480000','6500000')
 
 #한번에 출력되는 값의 갯수
 num_rows <- 50000
@@ -86,7 +87,7 @@ view(table(year(df$접수일)))
 df$시도<-sapply(str_split(df$관활기간," "),head,1)
 
 view(table(df$시도))
-
+view(df)
 
 #년도별에 따른 시도 유기동물 수 추출 
 df2<-df %>%
