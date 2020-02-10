@@ -29,6 +29,8 @@ E_animal <- E_animal[-c(6),]
 
 animal_E <- ggplot(E_animal, aes(년도, count, fill = count)) +
   geom_col() +
+  geom_text(aes(label = paste(count,""), 
+                family="NanumBarunGothic"), vjust = -0.2, hjust = 0.5, size=3) +
   ggtitle("연도별 유기동물 전체 수") +
   scale_fill_distiller(palette = "Blues", direction = 1) +
   theme_minimal() +
