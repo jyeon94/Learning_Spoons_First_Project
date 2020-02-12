@@ -36,7 +36,6 @@ gap1 <- Year_animal %>%
   mutate(rank = min_rank(-count) * 1,
          count_rel = count/count[rank==1],
          count_lbl = paste0(" ",count)) %>%
-  filter(rank !=1) %>%
   ungroup()
 
 p1 <- ggplot(gap1, aes(rank, group = gap1$sido, 
