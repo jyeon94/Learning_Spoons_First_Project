@@ -1,7 +1,7 @@
 ---
-title: "1차 프로젝트"
+title: "1인 가구와 유기 동물"
 author: "1조(연제호, 오승재, 정다영)"
-date: "2019년 7월 31일"
+date: "2020년 2월 13일"
 output:
   rmdformats::readthedown:
     code_folding: hide
@@ -23,7 +23,7 @@ output:
 >
 <2019.08.04, [파이낸셜뉴스](https://news.naver.com/main/read.nhn?mode=LSD&mid=sec&sid1=102&oid=014&aid=0004271775)>
 
-* 매년 유기 동물의 수가 증가하고 있고, 인터넷 뉴스에서는 유기 동물 수 증가의 원인으로 1인 가구 수의 증가를 꼽고 있다. 1인 가구가 증가하면서 반려 동물의 입양이 늘었으며 유기 또한 증가하였다는 것이다. 정부에서는 무책임한 동물 유기에 대한 방안으로 반려 동물에 대한 인식 전환을 촉구하는 한편, 동물 보호 및 복지를 위한 예산을 편성하여 유기 동물 보호소를 지원하고 입양을 권장하고 있다.
+* 매년 유기 동물의 수가 증가하고 있고, 인터넷 뉴스에서는 ***유기 동물 수 증가의 원인으로 1인 가구 수의 증가***를 꼽고 있다. 1인 가구가 증가하면서 반려 동물의 입양이 늘었으며 유기 또한 증가하였다는 것이다. 정부에서는 무책임한 동물 유기에 대한 방안으로 *반려 동물에 대한 인식 전환 캠페인*을 진행하는 한편, 동물 보호 및 복지를 위한 **예산** 을 편성하여 유기 동물 보호소를 지원하고 입양을 권장하고 있다.
 
 ## 분석 목적 
 
@@ -36,7 +36,7 @@ output:
 ## 활용 데이터
 
 데이터     |  사용 변수  |  시  점  |  출  처  |  파일형식  
------------|-------------|----------|-----------------------
+-----------|-------------|----------|----------|-------------
 동물보호관리시스템 유기동물 조회 서비스 | 접수일자, 품종, 발견장소, 상태, 관할기관 | 연 단위 | 농림축산식품부 | Open API 
 가구 총조사 | 가구주의 연령 및 가구원수별 가구(일반가구) - 시군구 | 연 단위 | 통계청 | CSV 
 가구 총조사 | 인구, 가구 및 주택 - 읍면동(2015), 시군구(2016~) | 연 단위 | 통계청 | CSV 
@@ -45,9 +45,10 @@ output:
 
 ## 유기 동물 데이터
 
-* 유기 동물 조회 서비스 시작인 2014년부터 서비스 개편 이전인 2016년까지의 데이터는 입력 기준이 존재 하지 않음
+* 유기 동물 조회 서비스 시작인 2014년부터 서비스 개편 이전인 2016년까지의 데이터는 입력 기준이 ***존재하지 않음***
 
-* 2014년~2016년 문자 전처리 진행
+* 2014년 ~ 2016년 문자 전처리 진행
+* 2017년 ~ 2019년 OPEN API 추출
 
 ### 사용 패키지
 ```{r, eval=F}
@@ -735,38 +736,6 @@ df_dog_rank_2019<- df_dog_rank_2019 %>%
 
 a <- df_dog_rank_2019$품종
 
-# 유기견 품종 시각화
-p <- df_dog_rank_bind %>%
-  plot_ly(
-    x= ~유기동물수,
-    y = ~품종,
-    frame = ~년도,
-    type = 'bar',
-    text = ~유기동물수,
-    textposition = 'auto',
-    marker = list(color = 'rgb(135,206,250)',
-                  line = list(color = 'rgb(8,48,107)',
-                         width = 1.5)),
-    height = 500,
-    width = 550
-  ) %>%
-  layout(
-    title = "<b>년별 유기견 TOP10</b>",
-    titlefont = list(size = 15,family='H2GTRE.ttf'),
-    xaxis = list(range = c(0,10000),
-                 title = '<b>유기견 수</b>',
-                 titlefont = list(
-                 size = 14
-                 ),
-                 tickvals= seq(0,10000,1000)),
-    yaxis = list(title='<b>품종</b>',
-                 categoryarray = a,
-                 titlefont = list(
-                 size = 14
-                 )),
-    showlegend = FALSE
-)
-
 # 유기묘 top10 선정
 df_cat_rank <- df %>%
   filter(종류 == '고양이')
@@ -808,8 +777,47 @@ df_cat_rank_2019<-df_cat_rank_2019 %>%
 
 df_cat_rank_bind$count <- df_cat_rank_bind$유기동물수 %/% 100
 
-a <- df_cat_rank_2019$품종
+c <- df_cat_rank_2019$품종
+```
 
+```{r, echo=F, warning=F}
+# 유기견 품종 시각화
+p <- df_dog_rank_bind %>%
+  plot_ly(
+    x= ~유기동물수,
+    y = ~품종,
+    frame = ~년도,
+    type = 'bar',
+    text = ~유기동물수,
+    textposition = 'auto',
+    marker = list(color = 'rgb(135,206,250)',
+                  line = list(color = 'rgb(8,48,107)',
+                         width = 1.5)),
+    height = 500,
+    width = 550
+  ) %>%
+  layout(
+    title = "<b>년별 유기견 TOP10</b>",
+    titlefont = list(size = 15,family='H2GTRE.ttf'),
+    xaxis = list(range = c(0,10000),
+                 title = '<b>유기견 수</b>',
+                 titlefont = list(
+                 size = 14
+                 ),
+                 tickvals= seq(0,10000,1000)),
+    yaxis = list(title='<b>품종</b>',
+                 categoryarray = a,
+                 titlefont = list(
+                 size = 14
+                 )),
+    showlegend = FALSE
+)
+
+# 실행
+p
+```
+
+```{r, echo=F, warning=F}
 # 유기묘 시각화
 cat <- df_cat_rank_bind %>%
   plot_ly(
@@ -835,23 +843,90 @@ cat <- df_cat_rank_bind %>%
                    exponentformat= 'none'
                  )),
     yaxis = list(title='<b>품종</b>',
-                 categoryarray = a,
+                 categoryarray = c,
                  titlefont = list(
                    size = 14
                  )),
     showlegend = FALSE
   )
-```
 
-```{r, echo=F, warning=F}
-p
+# 실행
 cat
 ```
 
 ## 도별 유기 동물 수
 
-```{r}
+* 2018년부터 경기도에서 가장 많은 유기 동물이 발생
+* 2015년~2016년 유기 동물 발생 1위 도시 서울특별시는 2019년에는 순위가 9위로 하락
 
+```{r, include=F, message=F}
+# 기초 전처리
+df_animal <- read.csv("./data/abandoned_animal(All)_ver3.csv",fileEncoding = "UTF-8")
+
+df_animal$접수일 <- ymd(df_animal$접수일)
+
+df_animal <- df_animal %>%
+  drop_na()
+
+# 년도별 시도 유기동물 전체 수
+Year_animal <- df_animal %>%
+  group_by(year(df_animal$접수일) , df_animal$시도) %>%
+  summarise(count = n())
+
+Year_animal <- Year_animal %>%
+  rename("year" = `year(df_animal$접수일)`)
+
+Year_animal <- Year_animal %>%
+  rename("sido" = 'df_animal$시도')
+
+Year_animal <- Year_animal[Year_animal$year!=2020,]
+
+# 연도별 기준 시도 전체 동물 수 :2015~2019
+gap1 <- Year_animal %>%
+  group_by(year) %>%
+  mutate(rank = min_rank(-count) * 1,
+         count_rel = count/count[rank==1],
+         count_lbl = paste0(" ",count)) %>%
+  ungroup()
+```
+
+```{r, include=F, message=F}
+p1 <- ggplot(gap1, aes(rank, group = gap1$sido, 
+                       fill = as.factor(gap1$sido), 
+                       color = as.factor(gap1$sido))) 
+p1 <- p1 + geom_tile(aes(y = gap1$count/2, height = gap1$count, width = 0.9), 
+                     alpha = 0.8, color = NA)
+p1 <- p1 + theme_classic(base_family="NanumBarunGothic") 
+
+# 축 서식
+p1 <- p1 + geom_text(aes(y = 0, label = paste(gap1$sido, " "), 
+                         family="NanumBarunGothic"), vjust = 0.2, hjust = 1)
+p1 <- p1 + geom_text(aes(y=gap1$count,label = count_lbl, hjust=0))
+
+# 범레 지우기
+p1 <- p1 + guides(color = FALSE, fill = FALSE)
+p1 <- p1 + labs(title='유기 동물 수 : {closest_state}', 
+                x = NULL, y = NULL, caption = "Sources: 통계청", 
+                family="NanumBarunGothic")
+# 가로로 변경
+p1 <- p1 + coord_flip(clip = "off", expand = FALSE) 
+
+# 랭크 순서 변경
+p1 <- p1 + scale_x_reverse()
+
+# 테마 꾸미기
+p1 <- p1 + theme(plot.title = element_text(hjust = 0, size = 18))
+p1 <- p1 + theme(axis.ticks.y = element_blank())
+p1 <- p1 + theme(axis.text.y  = element_blank())
+p1 <- p1 + theme(plot.margin = margin(1,2.5,1,2.5, "cm"))
+
+# 애니메이션으로 만들기
+p1 <- p1 + transition_states(year, transition_length = 8, state_length = 1) +
+  ease_aes('cubic-in-out') 
+```
+
+```{r}
+p1
 ```
 
 ## 연도별 도별 1인 가구 비율
@@ -869,6 +944,9 @@ library(ggthemes)
 library(scales)
 library(viridis)
 library(extrafont)
+library(gganimate)
+library(gifski)
+library(reprex)
 
 # 인구 수 데이터 불러오기
 t.pops <- read.csv("./data/total_pop.csv", header = TRUE, fileEncoding = "CP949", encoding = "UTF-8")
@@ -997,7 +1075,7 @@ gg3 <- gg3 + theme(legend.text=element_text(size=6))
 grid.arrange(gg1, gg2, gg3)
 ```
 
-## 경기도 내 시별 1인 가구 비율 및 유기 동물 수
+## 경기도 내 시별 1인 가구 비율 및 유기 동물 수  
 
 ### 경기도 내 시별 1인 가구 비율
 ```{r, warning=F}
@@ -1070,9 +1148,9 @@ df_gyung_gi <- df_gyung_gi[,-c(1,2,3,4,5)]
 # 연도, 시별 정보 확인
 df_gyung_gi_sm<-df_gyung_gi %>%
   group_by(년도,시군구) %>%
-  summarise(count=n())%>%
-  view()
+  summarise(count=n())
 ```
+
 
 ### 경기도 1인 가구 수와 유기 동물 간 상관관계 분석
 
@@ -1104,9 +1182,9 @@ gyungi_cor <- ggplot(df_merged, aes(one_house,유기동물수)) +
   stat_smooth(method=lm,col='red',geom='smooth',se=FALSE) 
 ```
 
-## 서울특별시 내 구별 1인 가구 비율 및 유기 동물 수
+## 서울특별시 내 구별 1인 가구 비율 및 유기 동물 수  
 
-### 서울특별시 내 구별 1인 가구 비율
+### 서울특별시 내 구별 1인 가구 비율 
 
 ```{r, warning=F}
 # wide format을 long format으로 변환
@@ -1237,5 +1315,5 @@ grid.arrange(gyungi_cor,seoul_cor,nrow=1)
 
 * 서울시, 경기도를 비롯한 지자체에서 동물 보호 정책을 발표, 사업을 운영하고 있다. 
 * 사업 주요 내용은 이미 발생된 유기 동물에 대한 보호 및 입양이다.
-* 유기 동물 방지를 위해 가장 선행되어야 할 것은 무분별한 동물 판매 및 입양을 막는 것이 되어야 할 것이다. 
+* 유기 동물 방지를 위해서는 동물 입양 단계부터 정책이 진행되지 않는게 아쉽다.
 
