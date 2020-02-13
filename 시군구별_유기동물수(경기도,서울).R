@@ -66,10 +66,10 @@ gyung_gi<-df_count%>%
           )
   ) %>%
   layout(
-    title = "<b>경기도시별 유기동물 수<br> </b>",
+    title = "<b>경기도 시군별 유기동물 수<br> </b>",
     font = list(size = 10),
-    xaxis = list(title='시군'),
-    yaxis = list(title = '<b>유기동물수<br> </b>',
+    xaxis = list(title='<b?유기동물 수</b>'),
+    yaxis = list(title = '<b>시군<br> </b>',
                  categoryarray=gyung_gi_order,
                  size = 10),
     updatemenus = list(
@@ -131,8 +131,8 @@ seoul<-df_seoul_count%>%
   layout(
     title = "<b>서울특별시 구별 유기동물 수<br> </b>",
     font = list(size = 10),
-    xaxis = list(title='구'),
-    yaxis = list(title = '<b>유기동물수<br> </b>',
+    xaxis = list(title='<b>유기동물수</b?'),
+    yaxis = list(title = '<b>구<br> </b>',
                  categoryarray=seoul_order,
                  size = 10),
     updatemenus = list(
