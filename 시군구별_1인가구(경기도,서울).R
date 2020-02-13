@@ -140,7 +140,7 @@ seoul_one_house<-df_pops_seoul_all%>%
           )
   ) %>%
   layout(
-    title = "<b>경기도 시군별 1인가구 수<br> </b>",
+    title = "<b>서울특별시 구별 1인가구 수<br> </b>",
     font = list(size = 10),
     xaxis = list(title='<b>1인가구 수</b>'),
     yaxis = list(title = '<b>시군<br> </b>',
