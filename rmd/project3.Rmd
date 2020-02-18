@@ -1,0 +1,1344 @@
+---
+title: "1인 가구와 유기 동물"
+author: "1조 미옹마옹(연제호, 오승재, 정다영)"
+date: "2020년 2월 13일"
+output: 
+  rmdformats::readthedown:
+    code_folding: hide
+    number_sections: true
+    self_contained: true
+    lightbox: true
+    gallery: true
+---
+
+# 주제 선정
+
+## 분석 배경
+
+>>> 
+**'전국민 10명중 3명 반려동물 보유', 반려동물 등록세 공론화해야**
+>>
+...생활수준 향상과 고령화, 1인가구 증가에 따라 반려동물 보유 가구 수는 증가 추세다. 농림축산식품부 자료(2018)에 따르면 전국 가구의 29.5%인 511만 가구가 반려동물과 함께 하고 있다.
+...
+>
+<2019.08.04, [파이낸셜뉴스](https://news.naver.com/main/read.nhn?mode=LSD&mid=sec&sid1=102&oid=014&aid=0004271775)>
+
+매년 유기 동물의 수가 증가하고 있고, 인터넷 뉴스에서는 ***유기 동물 수 증가의 원인으로 1인 가구 수의 증가***를 꼽고 있다. 1인 가구가 증가하면서 반려 동물의 입양이 늘었으며 유기 또한 증가하였다는 것이다. 정부에서는 무책임한 동물 유기에 대한 방안으로 *반려 동물에 대한 인식 전환 캠페인*을 진행하는 한편, 동물 보호 및 복지를 위한 **예산** 을 편성하여 유기 동물 보호소를 지원하고 입양을 권장하고 있다.
+
+## 분석 목적 
+
+이번 가설을 통해 인터넷 뉴스를 통해 접하고 있는 유기 동물 현황과 1인 가구의 증가간 관계를 분석하여 사실 여부를 확인하고 유기 동물 문제의 대안을 제안하고자 한다.
+
+## 가설
+
+1인 가구와 유기동물 증가는 상관 관계일 것이다.
+
+## 활용 데이터
+
+데이터     |  사용 변수  |  시  점  |  출  처  |  파일형식  
+-----------|-------------|----------|----------|-------------
+동물보호관리시스템 유기 동물 조회 서비스 | 접수일자, 품종, 발견장소, 상태, 관할기관 | 연 단위 | 농림축산식품부 | Open API 
+가구 총조사 | 가구주의 연령 및 가구원수별 가구(일반가구) - 시군구 | 연 단위 | 통계청 | CSV 
+가구 총조사 | 인구, 가구 및 주택 - 읍면동(2015), 시군구(2016~) | 연 단위 | 통계청 | CSV 
+
+# 데이터 전처리
+
+## 유기 동물 데이터
+
+농림축산식품부에서는 Open API를 통해 유기 동물 조회 서비스를 공개하고 있어 2015년부터 2019년까지의 데이터를 추출하였다. 다만, 유기 동물 조회 서비스 시작인 2014년부터 서비스 개편 이전인 2016년까지의 데이터는 입력 기준이 ***존재하지 않기 때문에*** 통일되지 않았던 개와 고양이의 품종명 전처리를 진행하였다.
+
+### 유기 동물 조회 서비스 API 불러오기
+```{r, message=F}
+# 사용 패키지
+library(tidyverse)
+library(XML)
+library(lubridate)
+
+#open api 인증키
+service_key <-'15PKRVa0527Ap7dvKbQOvC979eprNyZLi5a%2F4RNdtTOGAHUxQ0IqE%2FkfGLgMAG7%2FDPBnpINkhvWKtsX%2Fbkxc%2Fg%3D%3D'
+
+#open api url
+url <- 'http://openapi.animal.go.kr/openapi/service/rest/abandonmentPublicSrvc/abandonmentPublic?'
+
+#검색 시작일
+bgnde = '20150101'
+
+#축종코드 417000 = 개, 422400 = 묘
+upkind = c('417000','422400')
+
+#시도코드 6110000 = 서울특별시
+uprcd = c('6110000','6260000','6270000','6280000','6290000',
+          '5690000','6300000','6310000','6410000',
+          '6420000','6430000','6440000','6450000','6460000','6470000',
+          '6480000','6500000')
+
+#한번에 출력되는 값의 갯수
+num_rows <- 50000
+
+#xml을 담기 위한 리스트 생성
+urlist <- list()
+
+cnt <- 0
+
+#for문을 이용하여 urlist에 xml 담기
+for(i in 1:length(uprcd)){
+  for (j in 1:length(upkind)){
+    #cnt를 이용하여 인덱스 설정
+    cnt = cnt + 1 
+    #xml을 urlist에 각 인덱스마다 복사
+    urlist[cnt] <- paste0(url,'bgnde=',bgnde,
+                          '&upkind=', upkind[j],
+                          '&upr_cd=', uprcd[i],
+                          '&numOfRows=', num_rows,
+                          '&ServiceKey=', service_key)
+  }
+}
+
+#urlist에 있는 xml을 파싱하기 위해 빈 리스트 생성
+raw.data <- list()
+rootnode <- list()
+for(i in 1:length(urlist)){
+  # xml 파싱
+  # XML을 요청하기 위해 생성한 URL을 적용
+  raw.data[[i]] <- xmlTreeParse(urlist[i], useInternalNodes = TRUE, encoding = "utf-8") 
+  # xml을 정보를 불러 올 수 있는 형태로 변환
+  rootnode[[i]] <- xmlRoot(raw.data[[i]])
+}
+
+#접수일, 품종, 발견장소,공고번호,상태 데이터를 담기 위해 빈 벡터 생
+a <- c()
+b <- c()
+c <- c()
+d <- c()
+e <- c()
+
+#벡터에 접수일, 품종, 발견장소, 공고번호,상태 삽입
+#union_all을 하지 않으면 전에 삽입했던 값이 사리지고 union을사용하면 중복된 값이 삭제 됨
+for(i in 1: length(rootnode)){
+  a <- union_all(a,xpathSApply(rootnode[[i]],"//happenDt",xmlValue))
+  b <- union_all(b,xpathSApply(rootnode[[i]],"//kindCd",xmlValue))
+  c <- union_all(c,xpathSApply(rootnode[[i]],"//happenPlace",xmlValue))
+  d <- union_all(d,xpathSApply(rootnode[[i]],"//orgNm",xmlValue))
+  e <- union_all(e,xpathSApply(rootnode[[i]],"//processState",xmlValue))
+}
+
+#벡터를 이용하여 유기견 데이터프레임 생성
+df <- data.frame(접수일= a,
+                    품종=b,
+                    상태=e,
+                    발견장소=c,
+                    관활기간=d)
+                         
+#df접수일을 date format으로 변환
+df$접수일<-ymd(df$접수일)
+
+#df$관할기간을 공백으로 분리후 첫번째 값을 시도로 지정
+df$시도<-sapply(str_split(df$관활기간," "),head,1)
+```
+```{r, eval=F, echo=F}
+# csv 파일로 저장
+write.csv(df,'./output/abandoned_animal_national_ver3.csv',row.names = FALSE)
+```
+
+### 유기 동물 데이터의 접수일을 연 단위로 변경 
+```{r}
+# raw 데이터 불러오기
+df <- read.csv("./data/abandoned_animal(All)_ver3.csv")
+
+df_animal <- df
+
+# 년도 데이터로 변환
+df_animal$접수일 <- ymd(df_animal$접수일)
+```
+
+### 고양이 품종 전처리
+```{r}
+# 고양이 선택
+df_cat <- df_animal %>%
+    filter(종류=='고양이')
+
+# 기초 전처리
+df_cat$품종 <- as.character(df_cat$품종)
+df_cat$품종 <- trimws(df_cat$품종)
+df_cat$품종 <- gsub("\\s+","",df_cat$품종)
+
+# 세부 전처리
+df_cat[str_detect(df_cat$품종,"\\+"),"품종"]<- "믹스"
+df_cat[str_detect(df_cat$품종,"콧숏"),"품종"]<- "한국고양이"
+df_cat[str_detect(df_cat$품종,"폐"),"품종"]<- "페르시안"
+df_cat[df_cat$품종=="","품종"] <- "기타"
+
+cat1 <- c( '고양이','한국고양이','코숏','\\s+','길고양이','쇼콧','쇼컷','코숏믹스추정','미상','야생고양이','코솟','KSH','치즈','치즈태비','코리안숏헤어','코쇽','터앙+셀커크렉스','턱시도코숏' )
+cat2 <- c( '하일랜드폴드' )
+cat3 <- c( '페르시안','페르시안익스트림' )
+cat4 <- c('통키니즈')
+cat5 <- c('터키시앙고라','앙고라')
+cat6 <- c('엑조틱','엑조틱숏헤어','엑죠틱','이그조틱숏헤어','엑조틱고양이','엔죠틱')
+cat7 <- c('기타', '새끼고양이', '품종묘', '검은색무늬', '드고양이', '모름', '애기고양이', '이집션마우?')
+cat8 <- c('레그돌-라가머핀', '라가머핀', '렉돌')
+cat9 <- c('혼합', '페르시안믹스', '믹스묘', '잡종', '터키시앙고라믹스', '노르웨이숲믹스추정', '러시안블루믹스', '품종묘믹스추정', '노르웨이숲믹스추정.', '노르웨이숲믹스', '놀숲혼종', '러블믹스', '러시안블루믹스', '러시안블루+코숏', '방갈믹스', '벵갈혼종', '브리티쉬숏헤어믹스', '브리티시숏헤어추정', '브리티시숏헤어믹스', '샴믹스', '샴+쿤믹스추정', '스핑크스믹스', '아메리칸컬믹스', '아메숏믹스', '아숏믹스', '앙고라믹스', '엑조틱믹스', '친칠라믹스', '터키쉬믹스추정', '터키쉬앙고라믹스', '터키쉬앙고라혼합종', '터키쉬앙골라믹스', '턱시도고숏믹스', '페르시아믹스', '페르시안혼합', '페르시안(혼종)', '혼종고양이', '혼합(페르시아추정)', '혼합종(장모종)')
+cat10 <- c('재패니즈밥테일')
+cat11 <- c('스코티시폴드스트레이트', '스코티쉬스트레이트', '스코디티쉬스트레이트', '스코디쉬스트레이트', '스트레이트폴드', '폴드', '스코티시폴드')
+cat12 <- c('실버태비')
+
+str1 <- paste0( "(", paste(cat1, collapse = "|"), ")" ) 
+str2 <- paste0( "(", paste(cat2, collapse = "|"), ")" )
+str3 <- paste0( "(", paste(cat3, collapse = "|"), ")" )
+str4 <- paste0( "(", paste(cat4, collapse = "|"), ")" )
+str5 <- paste0( "(", paste(cat5, collapse = "|"), ")" )
+str6 <- paste0( "(", paste(cat6, collapse = "|"), ")" )
+str7 <- paste0( "(", paste(cat7, collapse = "|"), ")" )
+str8 <- paste0( "(", paste(cat8, collapse = "|"), ")" )
+str9 <- paste0( "(", paste(cat9, collapse = "|"), ")" )
+str10 <- paste0( "(", paste(cat10, collapse = "|"), ")" )
+str11 <- paste0( "(", paste(cat11, collapse = "|"), ")" )
+str12 <- paste0( "(", paste(cat12, collapse = "|"), ")" )
+
+df_cat[str_detect(df_cat$품종, str1), "품종"] <- "한국고양이"
+df_cat[str_detect(df_cat$품종, str2), "품종"] <- "하일랜드폴드"
+df_cat[str_detect(df_cat$품종, str3), "품종"] <- "하바나브라운"
+df_cat[str_detect(df_cat$품종, str4), "품종"] <- "페르시안"
+df_cat[str_detect(df_cat$품종, str5), "품종"] <- "터키시앙고라"
+df_cat[str_detect(df_cat$품종, str6), "품종"] <- "엑조틱"
+df_cat[str_detect(df_cat$품종, str7), "품종"] <- "기타"
+df_cat[str_detect(df_cat$품종, str8), "품종"] <- "랙돌"
+df_cat[str_detect(df_cat$품종, str9), "품종"] <- "믹스"
+df_cat[str_detect(df_cat$품종, str10), "품종"] <- "밥테일"
+df_cat[str_detect(df_cat$품종, str11), "품종"] <- "스코티시폴드"
+df_cat[str_detect(df_cat$품종, str12), "품종"] <- "아메리칸컬"
+```
+
+### 개 품종 전처리
+```{r}
+# 개 선택
+df_dog <- df %>%
+    filter(종류=='개')
+
+# 기초 전처리
+df_dog$품종 <- as.character(df_dog$품종)
+df_dog$품종 <- trimws(df_dog$품종)
+df_dog$품종 <- gsub("\\s+","",df_dog$품종)
+
+# 개 분류 대전제 전처리
+mix <- c('믹스','혼','mix','교잡종','유사견','\\+','잡종','발바리','몽그렐','폼피츠','발발이','비숑푸들','또는','시바블랙탄','Mix')
+remove_list <- c('추정','새끼', '추정', '\\?', '비슷', '보임','고슴도치', '닭', '염소')
+etc <- c('갈색','검은','돼지','들개','모르겠음','미상','번호없음','부리탄','사냥','샤파이어','시잉프랑세즈','올드잉글리쉬','울프', '한국','없음','불가','중','푸말',
+         '빠삐용,장모치와와','\\.','닮음','대형','스톱','바둑이','쉬즈','시즈','시코쿠','영포','or'
+         ,'유고','재래종','토종개','포엘잉글리쉬','포유자견','홀드잉글리슈','흰검색','흰색')
+
+mixed <- paste0( "(", paste(mix, collapse = "|"), ")" ) 
+removed<- paste0( "(", paste(remove_list, collapse = "|"), ")" )
+etc_changed<-paste0( "(", paste(etc, collapse = "|"), ")" )
+
+df_dog[str_detect(df_dog$품종, mixed), "품종"] <- "믹스견"
+df_dog[str_detect(df_dog$품종, removed), "품종"] <- ""
+df_dog[str_detect(df_dog$품종,etc_changed),"품종"]<-"기타"
+
+df_dog[df_dog$품종=='개',"품종"] <- '기타'
+df_dog[df_dog$품종=='크로렌탈','품종']<-'기타'
+df_dog[df_dog$품종=='찡','품종']<-'기타'
+df_dog[df_dog$품종=='챠우챠우',] <- '차우차우'
+df_dog[df_dog$품종=='강아지',"품종"] <- "기타"
+df_dog[df_dog$품종=="","품종"] <-"기타"
+
+# 개 세부 전처리
+dog1 <- c('올드잉글리쉬쉽독','잉글리쉬십독','올드잉글리시시프독','잉글리쉬쉿독',
+          '올드잉그리쉬쉽독','올드잉글리쉬쉽동','올드잉글리쉬쉽독','올드잉글리시쉽독','올드잉글리시십독','잉글랜드쉽독','잉글리쉬쉽독','잉글리쉬쉽독','잉글리시쉽독')
+dog2 <- c('요키','요크셔')
+dog3 <- c('웰시코기가디언','웰시코기펨브로크','웰시코기카디건')
+dog4 <- c('허스키')
+dog5 <- c('휘펫','휘핏그레이하운드')
+dog6 <- c('황구')
+dog7 <- c('피플','피플테리어','피풀','핀불','핏볼테리어','핏불','핏불테리어','핏블','핏블테리어','핏풀','핏플','핏플테리어','아메리칸핏불테리어','팻불테리어','피불테리어','핏불테리어','핏&#48525;테리어')
+dog8 <- c('그레이트피레니즈','피레니안마운틴독')
+dog9 <- c('플롯하운드')
+dog10 <- c('플레사카나리오','프레사까나리오','카나리오','도고까니리오','도그까니리노')
+dog11 <- c('미텔스피츠, 재패니즈스피츠','스피츠','재패니즈스피츠','클라인스피츠')
+dog12 <- c('풍산','풍산견','풍산기')
+dog13 <- c('포인타','잉글리쉬포인터','저먼포인터','저먼 와이어헤어드포인터','독일포인터','독포','저먼쇼트헤어드포인터','저먼와이어헤어드포인터','포인트')
+dog14 <- c('토이폭스테리어', '와이어폭스테리어', '폭스테리어','토이폭스테리어', '와이어테리어')
+dog15 <- c('티베탄마스티프', '티벳탄마스티프', '티벳탄마스티프', '짱오', '티벳티안마스티프' )
+dog17 <- c('테뷰런', '티브론')
+dog18 <- c('코카푸')
+dog19 <- c('케인코르소', '케인코로소', '케인크로소', '케인크르소')
+dog20 <- c('케니스펜더')
+dog21 <- c('카이훗', '카이훗 하운드')
+dog22 <- c('카레리안베어독')
+dog23 <- c('체코스로바키아울푸독')
+dog24 <- c('잭러셀','잭럿', '잭넉셀테리어', '잭러셀테리어', '잭러셀테리어', '젝너셀테리어', '젝러셀테리어')
+dog25 <- c('재패니즈친', '재패니즈칭', '저패니즈', '제패니즈친', '제페니스친', '제페니스친', '제페니즈찡','제페니즈 친', '제페니즈찡','제페니즈친', '제페니즈칭', '재패니스친', '저패니즈친', '저페니즈')
+dog26 <- c('새끼발바리')
+dog27 <- c('세틀랜드시프독', '셀티', '셔틀랜드쉽독', '셔틀랜드쉽독', '러브콜리','러프콜리','셰틀랜드십도그', '셔틀렌드쉽독', '셰틀랜드쉽독', '쉐트랜드쉽독', '쉽독', '쉽득')
+dog28 <- c('센트럴아시안오브차카', '미들아시안오브차카', '오브차카 코카시안', '코카시안오브차카','미들오브차카','오브차카','오브차카코카시안')
+dog29 <- c('새터','세더','세타','세타포인터','세터','세터종','셰터','잉글리쉬쉐터','잉글리시세터','잉글리쉬세타','잉글리쉬세터','잉글리쉬셰터','아이리쉬세터','아이리쉬쉐터','세터브리트니','셋타','잉글리쉬세터','잉글리시세타')
+dog30 <- c('저먼셰퍼드', '저먼셰퍼드독', '오스트랄리안셰퍼드독','세퍼드','세퍼트','셰퍼드')
+dog31 <- c('스코티쉬테리어')
+dog32 <- c('스탠다드푸들', '미니어쳐푸들', '미디움푸들', '토이푸들', '토이푸들', '팬텀푸들', '미디엄푸들', '불랙턴푸들', '자이언트푸들')
+dog33 <- c('스테포드셔불테리어', '스텐포드셔테리어')
+dog34 <- c('브레타니스파니엘','브리타니스파니엘','브리티쉬스파니엘','블레타니스파니엘','스파니엘','스프링거스파니엘','아메리카코카스파니엘','아메리칸코카스파니엘','아메리칸코카','잉글리시스프링어스패니얼',
+           '잉글리쉬스프링거스파니엘','잉글리쉬코카스파니엘','프렌치스파니엘','코카스파니엘','코카스파니엘','킹찰스스파니엘','킹찰스스패니얼','킹 찰스스페니엘','킹찰스스파니엘','킹찰스스파니엘','킹찰스코카스파니엘','킹찰스파니엘', 
+           '킹챨스','캐벌리어킹찰스스파니엘','킹찰스스페니엘','스패니얼')
+dog35 <- c('시바','시바이누')
+dog36 <- c('시츄')
+dog37 <- c('실키테리어')
+dog38 <- c('아끼다', '아키다', '아키타','Akita')
+dog39 <- c('아나톨리안셰퍼드', '아나톨리안셰퍼드도그(캉갈)', '캉갈')
+dog40 <- c('아메리칸에스키모','에스키모','아메리칸에스키모도그')
+dog41 <- c('화이트테리어','화이트테리어')
+dog42 <- c('아메리칸블리','불리','아메리칸불리')
+dog43 <- c('아메리칸스테포드셔테리어','아메리칸스태퍼드셔테리어')
+dog44 <- c('미니어쳐슈나우저','화이트슈나우저','슈나우져','자이언트슈나우져','자이언트슈나우져')
+dog45 <- c('아이리쉬울프하운드', '잉글리쉬올프하운드')
+dog46 <- c('아이리쉬테리어')
+dog47 <- c('아이리쉬소프트코튼휘튼테리어')
+dog48 <- c('아츠간하운드|아프간하운드|아프칸하운드')
+dog49 <- c('알라스칸말라뮤트, 말라무트')
+dog50 <- c('미텔스피츠, 재패니즈스피츠')
+
+dog51 <- c('견카이오트')
+dog52 <- c('코리안트리플하운드', '트라이하운드')
+dog53 <- c('티벳탄테리어')
+dog54 <- c('페레니즈')
+dog55 <- c('pome')
+dog56 <- c('잉글리쉬폭스하운드')
+dog57 <- c('허배너스','허베너스')
+dog58 <- c('브래타니|브레타니|브루태니|브리타니|브리타니스|브리티나|프렌치브리타니')
+
+str21 <- paste0( "(", paste(dog1, collapse = "|"), ")" ) 
+str22 <- paste0( "(", paste(dog2, collapse = "|"), ")" )
+str23 <- paste0( "(", paste(dog3, collapse = "|"), ")" )
+str24 <- paste0( "(", paste(dog4, collapse = "|"), ")" )
+str25 <- paste0( "(", paste(dog5, collapse = "|"), ")" )
+str26 <- paste0( "(", paste(dog6, collapse = "|"), ")" )
+str27 <- paste0( "(", paste(dog7, collapse = "|"), ")" )
+str28 <- paste0( "(", paste(dog8, collapse = "|"), ")" )
+str29 <- paste0( "(", paste(dog9, collapse = "|"), ")" )
+str30 <- paste0( "(", paste(dog10, collapse = "|"), ")" )
+str31 <- paste0( "(", paste(dog11, collapse = "|"), ")" )
+str32 <- paste0( "(", paste(dog12, collapse = "|"), ")" )
+str33 <- paste0( "(", paste(dog13, collapse = "|"), ")" ) 
+str34 <- paste0( "(", paste(dog14, collapse = "|"), ")" )
+str35 <- paste0( "(", paste(dog15, collapse = "|"), ")" )
+str37 <- paste0( "(", paste(dog17, collapse = "|"), ")" )
+str38 <- paste0( "(", paste(dog18, collapse = "|"), ")" )
+str39 <- paste0( "(", paste(dog19, collapse = "|"), ")" )
+str40 <- paste0( "(", paste(dog20, collapse = "|"), ")" )
+str41 <- paste0( "(", paste(dog21, collapse = "|"), ")" )
+str42 <- paste0( "(", paste(dog22, collapse = "|"), ")" )
+str43 <- paste0( "(", paste(dog23, collapse = "|"), ")" )
+str44 <- paste0( "(", paste(dog24, collapse = "|"), ")" )
+str45 <- paste0( "(", paste(dog25, collapse = "|"), ")" )
+str46 <- paste0( "(", paste(dog26, collapse = "|"), ")" ) 
+str47 <- paste0( "(", paste(dog27, collapse = "|"), ")" ) 
+str48 <- paste0( "(", paste(dog28, collapse = "|"), ")" ) 
+str49 <- paste0( "(", paste(dog29, collapse = "|"), ")" ) 
+str50 <- paste0( "(", paste(dog30, collapse = "|"), ")" ) 
+str51 <- paste0( "(", paste(dog31, collapse = "|"), ")" ) 
+str52 <- paste0( "(", paste(dog32, collapse = "|"), ")" ) 
+str53 <- paste0( "(", paste(dog33, collapse = "|"), ")" ) 
+str54 <- paste0( "(", paste(dog34, collapse = "|"), ")" ) 
+str55 <- paste0( "(", paste(dog35, collapse = "|"), ")" ) 
+str56 <- paste0( "(", paste(dog36, collapse = "|"), ")" ) 
+str57 <- paste0( "(", paste(dog37, collapse = "|"), ")" ) 
+str58 <- paste0( "(", paste(dog38, collapse = "|"), ")" ) 
+str59 <- paste0( "(", paste(dog39, collapse = "|"), ")" ) 
+str60 <- paste0( "(", paste(dog40, collapse = "|"), ")" ) 
+str61 <- paste0( "(", paste(dog41, collapse = "|"), ")" ) 
+str62 <- paste0( "(", paste(dog42, collapse = "|"), ")" ) 
+str63 <- paste0( "(", paste(dog43, collapse = "|"), ")" ) 
+str64 <- paste0( "(", paste(dog44, collapse = "|"), ")" ) 
+str65 <- paste0( "(", paste(dog45, collapse = "|"), ")" ) 
+str66 <- paste0( "(", paste(dog46, collapse = "|"), ")" ) 
+str67 <- paste0( "(", paste(dog47, collapse = "|"), ")" ) 
+str68 <- paste0( "(", paste(dog48, collapse = "|"), ")" ) 
+str69 <- paste0( "(", paste(dog49, collapse = "|"), ")" ) 
+str70 <- paste0( "(", paste(dog50, collapse = "|"), ")" ) 
+str71 <- paste0( "(", paste(dog51, collapse = "|"), ")" ) 
+str72 <- paste0( "(", paste(dog52, collapse = "|"), ")" ) 
+str73 <- paste0( "(", paste(dog53, collapse = "|"), ")" ) 
+str74 <- paste0( "(", paste(dog54, collapse = "|"), ")" ) 
+str75 <- paste0( "(", paste(dog55, collapse = "|"), ")" ) 
+str76 <- paste0( "(", paste(dog56, collapse = "|"), ")" ) 
+str77 <- paste0( "(", paste(dog57, collapse = "|"), ")" ) 
+
+str78 <- paste0( "(", paste(dog58, collapse = "|"), ")" )  
+
+df_dog[str_detect(df_dog$품종,"보더콜리|보거|레몬보더"),"품종"]<- "보더콜리"
+df_dog[str_detect(df_dog$품종,"^골든|리버$|리바$|라도|리트리버"),"품종"]<-"리트리버"
+df_dog[str_detect(df_dog$품종,"덴$|데인$"),"품종"]<-"그레이트데인"
+df_dog[str_detect(df_dog$품종,"블랙탄$"),"품종"]<-"블랙탄"
+df_dog[str_detect(df_dog$품종,"^동경|댕견|동견"),"품종"]<-"동경견"
+df_dog[str_detect(df_dog$품종,"도사"),"품종"]<-"도사견"
+df_dog[str_detect(df_dog$품종,"닥스훈드$|훈트$"),"품종"] <- '닥스훈트'
+df_dog[str_detect(df_dog$품종,"치와와$"),"품종"] <- '치와와'
+df_dog[str_detect(df_dog$품종,"노이즈$|네이즈$"),"품종"] <- '말리리노이즈'
+df_dog[str_detect(df_dog$품종,"숑"),"품종"] <- '비숑프리제'
+df_dog[str_detect(df_dog$품종,"^버니즈|마운틴독"),"품종"]<-"버니즈마운틴독"
+df_dog[str_detect(df_dog$품종,"^베드링|^베들린|^베들링|^베를링|^베링턴"),"품종"]<-"베들링턴테리어"
+df_dog[str_detect(df_dog$품종,"^베어|라이카$"),"품종"]<-"라이카"
+df_dog[str_detect(df_dog$품종,"^벨기에|벨지언"),"품종"]<-"벨지안쉽독"
+df_dog[str_detect(df_dog$품종,"^볼|^뿔|잉글리쉬불테리어"),"품종"]<-"불테리어"
+df_dog[str_detect(df_dog$품종,"그리핀"),"품종"]<-"브르쉘그리펀"
+df_dog[str_detect(df_dog$품종,"브렌치블독|프렌치블독|불도그|불독"),"품종"]<-"불독"
+df_dog[str_detect(df_dog$품종,"블랙테리어"),"품종"]<-"블랙러시안테리어"
+df_dog[str_detect(df_dog$품종,"진도|호피|칡"),"품종"]<-"진돗개" 
+df_dog[str_detect(df_dog$품종,"빠삐"),"품종"]<-"파피용"
+df_dog[str_detect(df_dog$품종,"삽"),"품종"]<-"삽살개"
+df_dog[df_dog$품종=='그레이트데니','품종']<-'그레이트데인'
+df_dog[df_dog$품종=='이탈리안그레이하운드','품종']<-'그레이하운드'
+df_dog[df_dog$품종=='그로렌달','품종'] <-'그로넨달'
+df_dog[df_dog$품종=='테리어','품종']<-'기타'
+df_dog[df_dog$품종=='하운드','품종']<-'기타'
+df_dog[df_dog$품종=='하운드계통','품종'] <- '기타'
+df_dog[df_dog$품종=='하운드종','품종'] <-'기타'
+df_dog[str_detect(df_dog$품종,dog58),'품종']<-'브리트니'
+df_dog[df_dog$품종=='말라무트','품종'] <- '맬러뮤트'
+
+df_dog[str_detect(df_dog$품종, str21), "품종"] <- "올드잉글리쉬쉽독"
+df_dog[str_detect(df_dog$품종, str22), "품종"] <- "요크셔테리어"
+df_dog[str_detect(df_dog$품종, str23), "품종"] <- "웰시코기"
+df_dog[str_detect(df_dog$품종, str24), "품종"] <- "시베리안허스키"
+df_dog[str_detect(df_dog$품종, str25), "품종"] <- "휘핏"
+df_dog[str_detect(df_dog$품종, str26), "품종"] <- "누렁이"
+df_dog[str_detect(df_dog$품종, str27), "품종"] <- "핏불테리어"
+df_dog[str_detect(df_dog$품종, str28), "품종"] <- "피레니즈"
+df_dog[str_detect(df_dog$품종, str29), "품종"] <- "플롯하운드"
+df_dog[str_detect(df_dog$품종, str30), "품종"] <- "페로드프레사카나리오"
+df_dog[str_detect(df_dog$품종, str31), "품종"] <- "스피츠"
+df_dog[str_detect(df_dog$품종, str32), "품종"] <- "풍산개"
+df_dog[str_detect(df_dog$품종, str33), "품종"] <- "포인터"
+df_dog[str_detect(df_dog$품종, str34), "품종"] <- "폭스테리어"
+df_dog[str_detect(df_dog$품종, str35), "품종"] <- "티베탄마스티프"
+df_dog[str_detect(df_dog$품종, str37), "품종"] <- "벨기에테뷰런"
+df_dog[str_detect(df_dog$품종, str38), "품종"] <- "코카푸"
+df_dog[str_detect(df_dog$품종, str39), "품종"] <- "카네코르소"
+df_dog[str_detect(df_dog$품종, str40), "품종"] <- "케니스펜더"
+df_dog[str_detect(df_dog$품종, str41), "품종"] <- "아메리칸스테그하운드"
+df_dog[str_detect(df_dog$품종, str42), "품종"] <- "카렐리안베어도그"
+df_dog[str_detect(df_dog$품종, str43), "품종"] <- "체코슬로바키아늑대개"
+df_dog[str_detect(df_dog$품종, str44), "품종"] <- "잭러셀테리어"
+df_dog[str_detect(df_dog$품종, str45), "품종"] <- "재패니즈친"
+df_dog[str_detect(df_dog$품종, str46), "품종"] <- "발바리"
+df_dog[str_detect(df_dog$품종, str47), "품종"] <- "셰틀랜드십도그"
+df_dog[str_detect(df_dog$품종, str48), "품종"] <- "오브차카"
+df_dog[str_detect(df_dog$품종, str49), "품종"] <- "세터"
+df_dog[str_detect(df_dog$품종, str50), "품종"] <- "셰퍼드"
+df_dog[str_detect(df_dog$품종, str51), "품종"] <- "스코티시테리어"
+df_dog[str_detect(df_dog$품종, str52), "품종"] <- "푸들"
+df_dog[str_detect(df_dog$품종, str53), "품종"] <- "스타포드셔불테리어"
+df_dog[str_detect(df_dog$품종, str54), "품종"] <- "스패니얼"
+df_dog[str_detect(df_dog$품종, str55), "품종"] <- "시바견"
+df_dog[str_detect(df_dog$품종, str56), "품종"] <- "시추"
+df_dog[str_detect(df_dog$품종, str57), "품종"] <- "오스트레일리안실키테리어"
+df_dog[str_detect(df_dog$품종, str58), "품종"] <- "아키타견"
+df_dog[str_detect(df_dog$품종, str59), "품종"] <- "캉갈도그"
+df_dog[str_detect(df_dog$품종, str60), "품종"] <- "아메리칸에스키모"
+df_dog[str_detect(df_dog$품종, str61), "품종"] <- "웨스트하일랜드화이트테리어"
+df_dog[str_detect(df_dog$품종, str62), "품종"] <- "아메리칸불리"
+df_dog[str_detect(df_dog$품종, str63), "품종"] <- "아메리칸스태퍼드셔테리어"
+df_dog[str_detect(df_dog$품종, str64), "품종"] <- "슈나우저"
+df_dog[str_detect(df_dog$품종, str65), "품종"] <- "울프하운드"
+df_dog[str_detect(df_dog$품종, str66), "품종"] <- "아이리시테리어"
+df_dog[str_detect(df_dog$품종, str67), "품종"] <- "아이리쉬소프트코티드휘튼테리어"
+df_dog[str_detect(df_dog$품종, dog48), "품종"] <- "아프간하운드"
+df_dog[str_detect(df_dog$품종, str68), "품종"] <- "아프간하운드"
+df_dog[str_detect(df_dog$품종, str69), "품종"] <- "맬러뮤트"
+df_dog[str_detect(df_dog$품종, str70), "품종"] <- "스피츠"
+
+df_dog[str_detect(df_dog$품종, str71), "품종"] <- "카이오트"
+df_dog[str_detect(df_dog$품종, str72), "품종"] <- "코리아트라이하운드"
+df_dog[str_detect(df_dog$품종, str73), "품종"] <- "티베탄테리어"
+df_dog[str_detect(df_dog$품종, str74), "품종"] <- "페키니즈"
+df_dog[str_detect(df_dog$품종, str75), "품종"] <- "포메라니안"
+df_dog[str_detect(df_dog$품종, str76), "품종"] <- "폭스하운드"
+df_dog[str_detect(df_dog$품종, str77), "품종"] <- "하바나실크독"
+```
+
+## 인구 수 및 1인 가구 비율 데이터
+
+유기 동물 폼종에 대한 전처리를 마친 후 통계청에서 제공하고 있는 인구 수 데이터에 대한 전처리를 진행하였다. 통계정에서는 2015년부터 인구 전수 조사를 실시하였으며, 와이드 포맷으로 제공하고 있다.
+
+### 인구 수 롱 포맷으로 변경
+```{r, warning=F}
+# 사용 패키지
+library(tidyverse)
+
+# 인구 수 csv 파일 불러오기
+t.pops <- read.csv("./data/total_pop.csv", header = TRUE, fileEncoding = "CP949", encoding = "UTF-8")
+
+# 1행 제거
+t.pops2 <-t.pops[-1,]
+
+# 롱 포맷으로 변경
+t.pops3 <- t.pops2 %>%
+    gather(key="years", value="pops", "X2015", "X2016", "X2017", "X2018")
+
+# X 제거
+t.pops3$years <- substr(t.pops3$years,2,5)
+
+# 인구 수 숫자타입으로 변환
+t.pops3$pops <- as.numeric(t.pops3$pops)
+```
+
+### 가구 수 롱 포맷으로 변경
+```{r, warning=F, include=F}
+# 가구 수 csv 파일 불러오기
+house<- read.csv("./data/family_sido.csv", header = TRUE, fileEncoding = "CP949", encoding = "UTF-8")
+
+# 전체 가구 수 구하기
+house2 <- house %>%
+    filter(house$가구주의.연령=='합계') %>%
+    gather(key="years", value="family", "X2015", "X2016", "X2017", "X2018")
+
+# 열 선택하기
+house2 <- subset(house2, select = -2:-6)
+house2$years <- substr(house2$years,2,5)
+
+# 전체 가구 수 숫자타입으로 변환
+house2$family <- as.numeric(house2$family)
+
+# 1인 가구 수 구하기
+one.house2 <- house %>%
+    filter(house$가구주의.연령=='합계') %>%
+    gather(key="years", value="one.family", "X2015.1", "X2016.1", "X2017.1", "X2018.1")
+
+# 열 선택하기
+one.house2 <- subset(one.house2, select = -2:-6)
+one.house2$years<-substr(one.house2$years,2,5)
+
+# 1인 가구 수 숫자타입으로 변환
+one.house2$one.family <- as.numeric(one.house2$one.family)
+
+# 전국, 도별 1인 가구 수
+one.house2 <- house %>%
+    filter(house$가구주의.연령=='합계') %>%
+    gather(key="years", value="one.family", "X2015.1", "X2016.1", "X2017.1", "X2018.1")
+
+one.house2 <- subset(one.house2, select = -2:-6)
+one.house2$years<-substr(one.house2$years,2,5)
+one.house2$one.family <- as.numeric(one.house2$one.family)
+
+# 전국, 도별 전체 가구 수 및 1인 가구 수
+house3 <- cbind(house2, one.house2$one.family)
+names(house3)[4] <- c("one.family")
+house4 <- house3
+
+# 가구 수와 인구 수 합치기(pops 먼저 처리해야함)
+total1 <- cbind(house4, t.pops3$pops)
+names(total1)[5] <- c("pops")
+
+# 비율 열 추가
+n.house <- sapply(house4$family,as.numeric)
+n.onehouse <- sapply(house4$one.family,as.numeric)
+a<-(n.onehouse/n.house)*100
+
+percent <- NA
+percent <- round(a,2)
+
+total2 <-cbind(total1, percent)
+
+# 전국 데이터 제거
+total2 <- total2 %>% filter(total1$행정구역별.시군구. != "전국")
+
+# 1인가구 증가율 계산
+names(total2)[4]
+total3 <- total2 %>%
+    rename(행정구역별 = 행정구역별.시군구. ,
+                one_person = names(total2)[4]      
+    )
+
+total4 <- total3 %>%
+    arrange(행정구역별,years) %>%
+    group_by(행정구역별) %>%
+    mutate(lag(one_person))
+
+total4[4:5] <-
+    total4[4:5]%>%
+    sapply(as.character) %>%
+    sapply(as.numeric)
+
+total4$increase <- total4$one_person / total4$`lag(one_person)`-1
+total4$increase <- round(total4$increase, 2)
+
+# 증가율 NA 값 제거(2015년 제외)
+total4$years <- total4$years!=2015
+```
+
+# 데이터 시각화
+
+## 연도별 유기 동물 수
+
+유기된 개와 고양이 품종을 전처리한 후 연도별 유기 동물 수를 살펴보니 2015년부터 2017년까지 연평균 약 20%씩 유기 동물 수가 증가하는 것을 확인할 수 있다. 특히 2017년과 2018년은 유기 동물 수는 약 28%로 크게 증가하였다.
+
+```{r, include=F, message=F}
+# 사용 패키지
+library(lubridate)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(gganimate)
+library(gifski)
+library(reprex)
+library(knitr)
+library(magick)
+library(gridExtra)
+library(grid)
+library(plotly)
+library(extrafont)
+library(htmltools)
+```
+
+```{r, include=F, message=F}
+# 기초 전처리
+df_animal <- read.csv("./data/abandoned_animal(All)_ver3.csv")
+df_animal$접수일 <- ymd(df_animal$접수일)
+df_animal <- df_animal %>%
+    drop_na()
+
+# 년도별 유기동물 전체 수
+E_animal <- df_animal %>%
+    group_by(year(df_animal$접수일)) %>%
+    summarise(count = n())
+
+E_animal <- E_animal[-c(6),]
+E_animal$year <- E_animal$`year(df_animal$접수일)`
+```
+
+```{r, echo=F}
+animal_E <- ggplot(E_animal, aes(year, count, fill = count)) +
+    geom_col() +
+    ylim(c(0, 150000)) + 
+    geom_text(aes(label = paste(count,""), 
+                  family="NanumBarunGothic"), vjust = -0.5, hjust = 0.5, size=3) + 
+    ggtitle("연도별 유기 동물 수") +
+    scale_fill_distiller(palette = "Blues", direction = 1) +
+    theme_minimal() +
+    theme(
+        panel.grid = element_blank(),
+        panel.grid.major.y = element_line(color = "white"),
+        panel.ontop = TRUE) + 
+    theme(plot.title = element_text(family="NanumBarunGothic", 
+                                    face = "bold", color="Black", size=18))
+
+animal_E
+```
+
+## 연도별 유기견, 유기묘 현황
+
+연도별 유기 동물 수를 조금 더 세분화하여 개와 고양이로 나누었다. 유기견은 연평균 약 24%씩 증가하였고 유기묘는 연평균 약 11%씩 증가하였다.
+특히, 유기견 증가율은 2017년, 2018년에 각각 31%, 44%로 큰 폭으로 상승한 것을 확인하였다. 유기묘는 증가율은 2016년에 17%로 크게 상승하였다. 2019년에는 유기견 증가율은 약 12%로 둔화되었으나 유기묘 증가율은 15%로 상승했다.
+
+```{r, include=F, message=F}
+# 년도별 유기견 수 geom_area 적용
+E_dog <- df_animal %>%
+    group_by(year(df_animal$접수일),종류) %>%
+    filter(종류=="개") %>%
+    summarise(count = n())
+
+E_dog <- E_dog[-c(6),]
+E_dog$count <- as.numeric(E_dog$count)
+
+E_dog$year <- E_dog$`year(df_animal$접수일)`
+
+## 년도별 유기묘 수 
+E_cat <- df_animal %>%
+    group_by(year(df_animal$접수일),종류) %>%
+    filter(종류=="고양이") %>%
+    summarise(count = n())
+
+E_cat <- E_cat[-c(6),]
+E_cat$count <- as.numeric(E_cat$count)
+
+E_cat$year <- E_cat$`year(df_animal$접수일)`
+```
+
+```{r}
+# theme_set(theme_classic()) 적용
+theme_set(theme_classic())
+
+# 연도별 유기견 시각화
+E_dog1 <- ggplot(data=E_dog,aes(year,count)) +
+  geom_line(color="red") +
+  geom_text(aes(label = paste(count,""), 
+                family="NanumBarunGothic"), vjust = -1, hjust = 0.5, size=3) + 
+  theme(plot.title = element_text(family = "NanumBarunGothic")) +
+  scale_y_continuous(labels = comma) +
+  ggtitle("연도별 유기견 수") + 
+  labs(x = NULL, y = NULL)
+
+# 연도별 유기묘 시각화
+E_cat1 <- ggplot(data=E_cat,aes(year,count)) +
+  geom_line(color="blue") +
+  geom_text(aes(label = paste(count,""), 
+                family="NanumBarunGothic"), vjust = -1, hjust = 0.5, size=3) +
+  theme(plot.title = element_text(family = "NanumBarunGothic")) + 
+  scale_y_continuous(labels = comma) +
+  ggtitle("연도별 유기묘 수") + 
+  labs(x = NULL, y = NULL)
+
+# 연도별 유기묘, 유기견 - 화면 분할 그래프 
+grid.arrange(E_dog1, E_cat1, nrow=1, newpage = TRUE)
+```
+
+## 연도별 유기견, 유기묘 품종
+
+```{r, include=F, warning=F}
+
+# 유기 동물 데이터 불러오기
+df <- read.csv('./data/abandoned_animal(All)_ver3.csv')
+
+# 접수일을 연도 단위로 변경
+df$년도<-df$접수일 %>% 
+  ymd()%>%
+  year()
+
+# 유기견 TOP10 선정
+df_dog_rank <- df %>%
+  filter(종류 == '개')
+
+df_dog_rank <- df_dog_rank[df_dog_rank$년도!=2020,]  
+
+df_dog_rank <- df_dog_rank %>%
+  group_by(품종,년도) %>%
+  summarise(count=n())
+
+df_dog_rank_2017 <- df_dog_rank %>%
+  filter(년도==2017) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_dog_rank_2018 <- df_dog_rank %>%
+  filter(년도==2018) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_dog_rank_2019 <- df_dog_rank %>%
+  filter(년도==2019) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_dog_rank_bind <- rbind(df_dog_rank_2017,df_dog_rank_2018,df_dog_rank_2019)
+df_dog_rank_bind$품종 <- as.character(df_dog_rank_bind$품종)
+df_dog_rank_bind <- df_dog_rank_bind %>%
+  rename("유기동물수" = count)
+
+df_dog_rank_2019<- df_dog_rank_2019 %>%
+                    arrange((count))
+
+a <- df_dog_rank_2019$품종
+
+# 유기묘 top10 선정
+df_cat_rank <- df %>%
+  filter(종류 == '고양이')
+
+df_cat_rank$년도 <- df_cat_rank$접수일 %>%
+  ymd()%>%
+  year()
+
+df_cat_rank <- df_cat_rank[df_cat_rank$년도!=2020,]  
+
+df_cat_rank <- df_cat_rank %>%
+  group_by(품종,년도) %>%
+  summarise(count=n())
+
+df_cat_rank_2017 <- df_cat_rank %>%
+  filter(년도==2017) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_cat_rank_2018 <- df_cat_rank %>%
+  filter(년도==2018) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_cat_rank_2019 <- df_cat_rank %>%
+  filter(년도==2019) %>%
+  arrange(desc(count)) %>%
+  head(n= 10L)
+
+df_cat_rank_bind <- rbind(df_cat_rank_2017,df_cat_rank_2018,df_cat_rank_2019)
+
+df_cat_rank_bind<- df_cat_rank_bind %>%
+  rename("유기동물수" = count)
+
+df_cat_rank_bind$품종 <- as.character(df_cat_rank_bind$품종)
+
+df_cat_rank_2019<-df_cat_rank_2019 %>%
+  arrange((count))
+
+df_cat_rank_bind$count <- df_cat_rank_bind$유기동물수 %/% 100
+
+c <- df_cat_rank_2019$품종
+```
+
+```{r, echo=F, warning=F}
+# 유기견 품종 시각화
+p <- df_dog_rank_bind %>%
+  plot_ly(
+    x= ~유기동물수,
+    y = ~품종,
+    frame = ~년도,
+    type = 'bar',
+    text = ~유기동물수,
+    textposition = 'auto',
+    marker = list(color = 'rgb(135,206,250)',
+                  line = list(color = 'rgb(8,48,107)',
+                         width = 1.5)),
+    height = 500,
+    width = 550
+  ) %>%
+  layout(
+    title = "<b>년별 유기견 TOP10</b>",
+    titlefont = list(size = 15,family='H2GTRE.ttf'),
+    xaxis = list(range = c(0,10000),
+                 title = '<b>유기견 수</b>',
+                 titlefont = list(
+                 size = 14
+                 ),
+                 tickvals= seq(0,10000,1000)),
+    yaxis = list(title='<b>품종</b>',
+                 categoryarray = a,
+                 titlefont = list(
+                 size = 14
+                 )),
+    showlegend = FALSE
+)
+
+# 실행
+p
+```
+
+```{r, echo=F, warning=F}
+# 유기묘 시각화
+cat <- df_cat_rank_bind %>%
+  plot_ly(
+    x= ~유기동물수,
+    y = ~품종,
+    frame = ~년도,
+    type = 'bar',
+    text = ~유기동물수,
+    textposition = 'auto',
+    marker = list(color = 'rgb(135,206,250)',
+                  line = list(color = 'rgb(8,48,107)',
+                              width = 1.5)),
+    height = 500,
+    width = 550
+  ) %>%
+  layout(
+    title = "<b>년별 유기묘 TOP10</b>",
+    titlefont = list(size = 15,family='H2GTRE.ttf'),
+    xaxis = list(range = c(0, 1000),
+                 title = '<b>유기묘 수</b>',
+                 titlefont = list(
+                   size = 14,
+                   exponentformat= 'none'
+                 )),
+    yaxis = list(title='<b>품종</b>',
+                 categoryarray = c,
+                 titlefont = list(
+                   size = 14
+                 )),
+    showlegend = FALSE
+  )
+
+# 실행
+cat
+```
+
+## 도별 유기 동물 수
+
+지역 별 유기 동물 현황을 확인하기 위해 도 별로 구분한 유기 동물 수를 살펴보았다. 2018년부터 경기도에서 가장 많은 유기 동물이 발생하고 있으며,  2015년부터 2016년까지 유기 동물이 가자 많이 발생했던 서울특별시는 2019년에는 순위가 9위로 하락하였다.
+
+```{r, include=F, message=F}
+# 기초 전처리
+df_animal <- read.csv("./data/abandoned_animal(All)_ver3.csv",fileEncoding = "UTF-8")
+
+df_animal$접수일 <- ymd(df_animal$접수일)
+
+df_animal <- df_animal %>%
+  drop_na()
+
+# 년도별 시도 유기동물 전체 수
+Year_animal <- df_animal %>%
+  group_by(year(df_animal$접수일) , df_animal$시도) %>%
+  summarise(count = n())
+
+Year_animal <- Year_animal %>%
+  rename("year" = `year(df_animal$접수일)`)
+
+Year_animal <- Year_animal %>%
+  rename("sido" = 'df_animal$시도')
+
+Year_animal <- Year_animal[Year_animal$year!=2020,]
+
+# 연도별 기준 시도 전체 동물 수 :2015~2019
+gap1 <- Year_animal %>%
+  group_by(year) %>%
+  mutate(rank = min_rank(-count) * 1,
+         count_rel = count/count[rank==1],
+         count_lbl = paste0(" ",count)) %>%
+  ungroup()
+```
+
+```{r, include=F, message=F}
+p1 <- ggplot(gap1, aes(rank, group = gap1$sido, 
+                       fill = as.factor(gap1$sido), 
+                       color = as.factor(gap1$sido))) 
+p1 <- p1 + geom_tile(aes(y = gap1$count/2, height = gap1$count, width = 0.9), 
+                     alpha = 0.8, color = NA)
+p1 <- p1 + theme_classic(base_family="NanumBarunGothic") 
+
+# 축 서식
+p1 <- p1 + geom_text(aes(y = 0, label = paste(gap1$sido, " "), 
+                         family="NanumBarunGothic"), vjust = 0.2, hjust = 1)
+p1 <- p1 + geom_text(aes(y=gap1$count,label = count_lbl, hjust=0))
+
+# 범레 지우기
+p1 <- p1 + guides(color = FALSE, fill = FALSE)
+p1 <- p1 + labs(title='유기 동물 수 : {closest_state}', 
+                x = NULL, y = NULL, caption = "Sources: 통계청", 
+                family="NanumBarunGothic")
+# 가로로 변경
+p1 <- p1 + coord_flip(clip = "off", expand = FALSE) 
+
+# 랭크 순서 변경
+p1 <- p1 + scale_x_reverse()
+
+# 테마 꾸미기
+p1 <- p1 + theme(plot.title = element_text(hjust = 0, size = 18))
+p1 <- p1 + theme(axis.ticks.y = element_blank())
+p1 <- p1 + theme(axis.text.y  = element_blank())
+p1 <- p1 + theme(plot.margin = margin(1,2.5,1,2.5, "cm"))
+
+# 애니메이션으로 만들기
+p1 <- p1 + transition_states(year, transition_length = 8, state_length = 1) +
+  ease_aes('cubic-in-out') 
+```
+
+```{r}
+p1
+```
+
+## 연도별 도별 1인 가구 비율
+
+도별 유기 동물 발생 현황까지 확인하였고, 도별 1인 가구 비율을 확인하고자 하였다. 1인 가구 비율의 전국 평균은 약 29%로 경기도, 울산광역시, 인천광역시의 1인 가구 비율은 약 25%로 전국 평균보다 낮게 나타났다. 1인 가구 수는 경기도 > 서울특별시 > 부산광역시 > 경상남도 순이며, 1인 가구 증가율은 세종특별자치시 > 제주특별시 > 경기도 순이다.
+
+```{r, include=F, message=F}
+# 사용 패키지
+library(tidyverse)
+library(ggplot2)     
+library(gridExtra)   
+library(ggthemes)    
+library(scales)
+library(viridis)
+library(extrafont)
+library(gganimate)
+library(gifski)
+library(reprex)
+
+# 인구 수 데이터 불러오기
+t.pops <- read.csv("./data/total_pop.csv", header = TRUE, fileEncoding = "CP949", encoding = "UTF-8")
+
+# 1행 제거
+t.pops2 <-t.pops[-1,]
+
+# 롱 포맷으로 변경
+t.pops3 <- t.pops2 %>%
+    gather(key="years", value="pops", "X2015", "X2016", "X2017", "X2018")
+
+# X 제거
+t.pops3$years <- substr(t.pops3$years,2,5)
+t.pops3$pops <- as.numeric(t.pops3$pops)
+```
+
+```{r, include=F, message=F}
+# 가구 데이터 불러오기
+house <- read.csv("./data/family_sido.csv", header = TRUE, fileEncoding = "CP949", encoding = "UTF-8")
+
+# 전국, 도별 전체 가구 수
+house2 <- house %>%
+    filter(house$가구주의.연령=='합계') %>%
+    gather(key="years", value="family", "X2015", "X2016", "X2017", "X2018")
+
+house2 <- subset(house2, select = -2:-6)
+house2$years <- substr(house2$years,2,5)
+house2$family <- as.numeric(house2$family)
+
+# 전국, 도별 1인 가구 수
+one.house2 <- house %>%
+    filter(house$가구주의.연령=='합계') %>%
+    gather(key="years", value="one.family", "X2015.1", "X2016.1", "X2017.1", "X2018.1")
+
+one.house2 <- subset(one.house2, select = -2:-6)
+one.house2$years<-substr(one.house2$years,2,5)
+one.house2$one.family <- as.numeric(one.house2$one.family)
+
+# 전국, 도별 전체 가구 수 및 1인 가구 수
+house3 <- cbind(house2, one.house2$one.family)
+names(house3)[4] <- c("one.family")
+house4 <- house3
+
+# 가구 수와 인구 수 합치기(pops 먼저 처리해야함)
+total1 <- cbind(house4, t.pops3$pops)
+names(total1)[5] <- c("pops")
+
+# 비율 열 추가
+n.house <- sapply(house4$family,as.numeric)
+n.onehouse <- sapply(house4$one.family,as.numeric)
+a<-(n.onehouse/n.house)*100
+
+percent <- NA
+percent <- round(a,2)
+
+total2 <-cbind(total1, percent)
+
+# 전국 데이터 제거
+total2 <- total2 %>% filter(total1$행정구역별.시군구. != "전국")
+
+# 1인가구 증가율 계산
+names(total2)[4]
+total3 <- total2 %>%
+    rename(행정구역별 = 행정구역별.시군구. ,
+                one_person = names(total2)[4]      
+    )
+
+total4 <- total3 %>%
+    arrange(행정구역별,years) %>%
+    group_by(행정구역별) %>%
+    mutate(lag(one_person))
+
+total4[4:5] <-
+    total4[4:5] %>%
+    sapply(as.character) %>%
+    sapply(as.numeric)
+
+total4$increase <- total4$one_person / total4$`lag(one_person)`-1
+total4$increase <- round(total4$increase, 2)
+
+# 증가율 NA 값 제거(2015년 제외)
+total5 <- na.omit(total4)
+```
+
+```{r}
+# 1인 가구 비율
+gg1 <- ggplot(total5, aes(x=total5$행정구역별, y=years, fill=percent))
+gg1 <- gg1 + geom_tile(color="white", size=0.1)
+gg1 <- gg1 + scale_fill_viridis(name="비율(%)", label=comma)
+gg1 <- gg1 + coord_equal()
+gg1 <- gg1 + labs(x=NULL, y=NULL, title="1인 가구 비율")
+gg1 <- gg1 + theme_classic(base_family="NanumBarunGothic")
+gg1 <- gg1 + theme(plot.title=element_text(hjust=0))
+gg1 <- gg1 + theme(axis.ticks=element_blank())
+gg1 <- gg1 + theme(axis.text.x=element_text(size=7, angle = 90))
+gg1 <- gg1 + theme(legend.title=element_text(size=7))
+gg1 <- gg1 + theme(legend.text=element_text(size=6))
+
+# 1인 가구 수
+gg2 <- ggplot(total5, aes(x=total5$행정구역별, y=years, fill=total5$one_person)) 
+gg2 <- gg2 + geom_tile(color="white", size=0.1)
+gg2 <- gg2 + scale_fill_viridis(name="1인 가구 수", label=comma)
+gg2 <- gg2 + coord_equal()
+gg2 <- gg2 + labs(x=NULL, y=NULL, title="1인 가구 수")
+gg2 <- gg2 + theme_tufte(base_family="NanumBarunGothic")
+gg2 <- gg2 + theme(plot.title=element_text(hjust=0))
+gg2 <- gg2 + theme(axis.ticks=element_blank())
+gg2 <- gg2 + theme(axis.text.x=element_text(size=7, angle = 90))
+gg2 <- gg2 + theme(legend.title=element_text(size=7))
+gg2 <- gg2 + theme(legend.text=element_text(size=6))
+
+# 1인 가구 증가율
+gg3 <- ggplot(total5, aes(x=total5$행정구역별, y=years, fill=increase)) 
+gg3 <- gg3 + geom_tile(color="white", size=0.1)
+gg3 <- gg3 + scale_fill_viridis(name="증가율(%)", label=comma)
+gg3 <- gg3 + coord_equal()
+gg3 <- gg3 + labs(x=NULL, y=NULL, title="1인 가구 증가 추세")
+gg3 <- gg3 + theme_tufte(base_family="NanumBarunGothic")
+gg3 <- gg3 + theme(plot.title=element_text(hjust=0))
+gg3 <- gg3 + theme(axis.ticks=element_blank())
+gg3 <- gg3 + theme(axis.text.x=element_text(size=7, angle = 90))
+gg3 <- gg3 + theme(legend.title=element_text(size=7))
+gg3 <- gg3 + theme(legend.text=element_text(size=6))
+
+# 합치기
+grid.arrange(gg1, gg2, gg3)
+```
+
+## 경기도 내 시별 1인 가구 비율 및 유기 동물 수  
+
+도별 유기 동물 수와 도별 1인 가구 수 시각화를 통해 **경기도**의 유기 동물 수와 1인 가구 수가 가장 많음을 확인하였다. 경기도의 각 시별 가구 비율과 유기 동물 비율을 비교하여 상관 관계가 있는지 분석하였다.
+
+### 경기도 내 시별 1인 가구 비율
+```{r, warning=F, message=F}
+# 사용 패키지
+library(tidyverse)
+library(lubridate)
+
+# 인구 수 데이터 불러오기
+g_pops <- read.csv('./data/family_and_pops_sigungu.csv', fileEncoding = "CP949", encoding = "UTF-8")
+
+# 경기도 내 시별 인구 수 구하기
+df_pops <- g_pops[-1,]
+
+# 경기도 행 데이터 제외
+df_pops <- df_pops[df_pops$행정구역별.시군구.!='경기도',]
+
+# 연도별 1인가구수를 확인하기 위해 wide format을 long format으로 변환
+df_pops_one <- df_pops %>%
+    gather(key="years",value="one_pops","X2015.1", "X2016.1", "X2017.1", "X2018.1") %>%
+    subset(select=-2:-5)
+
+# years에 있는 x와 .1을 없애기 위해 substr 함수 사용
+df_pops_one$years <- df_pops_one$years %>%
+    substr(2,5)
+
+# one_pops컬럼명을 one_house로 변경
+df_pops_one <- df_pops_one %>%
+    rename("one_house" = one_pops)
+
+# 와이드 포맷을 롱 포맷으로 변환, 1인 가구 수 선택
+df_pops_one <- df_pops %>%
+  gather(key="years",value="one_house","X2015.1", "X2016.1", "X2017.1", "X2018.1") %>%
+  subset(select=-2:-5)
+
+# 연도 문자 X 제외
+df_pops_one$years <- df_pops_one$years %>%
+  substr(2,5)
+
+# 비율 계산을 위해 one_house컬럼을 numeric으로 변경
+df_pops_one$one_house <- df_pops_one$one_house %>% 
+  sapply(as.character) %>% # as.character를 먼저 하지 않으면 0이 제거됨
+  sapply(as.numeric)
+
+# mutate 함수를 활용하여 년도별 시군구별 1인가구 비율 계산
+df_pops_one <- df_pops_one %>%
+    group_by(years) %>%
+    mutate(비율 = one_house/sum(one_house))
+```
+
+### 경기도 내 시별 유기 동물 비율
+```{r, warning=F, message=F}
+# 사용 패키지
+library(tidyverse)
+library(lubridate)
+
+# 유기 동물 데이터 불러오기
+g_df <- read.csv('./data/abandoned_animal(All)_ver3.csv',fileEncoding = 'UTF-8')
+
+# 경기도 1인 가구 비율
+
+# 접수일 컬럼을 date format으로 변형하기 위해 ymd 함수 사용 
+g_df$접수일 <- ymd(g_df$접수일)
+
+# 연도만 추출하여 년도 컬럼 추가
+g_df$년도 <- year(g_df$접수일)
+
+# 인구 데이터는 2018년까지만 있으므로 2019년도 이전 데이터 선택
+g_df <- g_df[g_df$년도 < 2019,]
+
+# 유기 동물의 연도별 경기도 데이터 
+df_gyung_gi <- g_df %>%
+  filter(시도=='경기도') %>%
+  group_by(년도)
+
+# 컬럼명 수정
+df_gyung_gi <- df_gyung_gi %>%
+  rename("관할기관" = 관활기간)
+
+# 문자형으로 변환
+df_gyung_gi$관할기관 <- as.character(df_gyung_gi$관할기관)
+
+# 도와 시 분리
+df_gyung_gi$시군구<- sapply(str_split(df_gyung_gi$관할기관," "),tail,1)
+
+# 사용하지 않는 데이터 제외
+df_gyung_gi <- df_gyung_gi[,-c(1,2,3,4,5)]
+
+# 연도, 시별 정보 확인
+df_gyung_gi_sm <- df_gyung_gi %>%
+  group_by(년도,시군구) %>%
+  summarise(count=n())
+
+# 연도, 시군구별 유기동물 비율 생성
+df_gyung_gi_sm <- df_gyung_gi_sm %>%
+    group_by(년도) %>%
+    mutate(percentage = count/sum(count))
+```
+
+### 경기도 1인 가구와 유기 동물 간 상관관계 분석
+
+경기도의 시별 1인 가구 비율과 유기 동물 비율을 통해 0.7487341의 강한 상관 관계가 있음을 확인하였다.
+
+```{r, message=F, echo=T, include=T}
+# 경기도 내 1인 가구 비율과 유기 동물 비율 결합
+df_merged <- merge(df_gyung_gi_sm,df_pops_one,by.x=c("시군구","년도"),by.y=c("행정구역별.시군구.","years"))
+
+# count 컬럼명을 유기동물수로 변경
+names(df_merged)[names(df_merged)=="count"] <-"유기동물수"
+
+# 비율 컬럼명 및 percentage 컬럼명 변경
+names(df_merged)[names(df_merged)=="비율"] <- "시군구별_1인가구_비율"
+names(df_merged)[names(df_merged)=="percentage"] <- "시군구별_유기동물_비율"
+
+# 상관지수
+cor(df_merged$시군구별_1인가구_비율, df_merged$시군구별_유기동물_비율)
+```
+
+```{r, echo=F, warning=F}
+# 시각화
+gyungi_cor<-ggplot(df_merged,aes(시군구별_1인가구_비율,시군구별_유기동물_비율)) +
+    geom_point(colour = 'black') + 
+    ggtitle(label = '경기도') +
+    theme_classic(base_family = "NanumBarunGothic") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    xlab('1인가구') +
+    stat_smooth(method=lm,col='red',geom='smooth',se=FALSE) +
+    scale_x_continuous(labels = scales::percent) + 
+    scale_y_continuous(labels = scales::percent)
+
+gyungi_cor
+```
+
+## 서울특별시 내 구별 1인 가구 비율 및 유기 동물 수  
+
+서울특별시는 2015년과 2016년에는 유기 동물 수가 가장 많이 나타난 도시였으나 2019년에는 하락한 바 있어 경기도와 함께 상관 관계를 분석하였다.
+
+### 서울특별시 내 구별 1인 가구 비율 
+
+```{r, warning=F, message=F}
+# wide format을 long format으로 변환
+df_pops_seoul <- read.csv('./data/family_and_pops__seoul.csv', fileEncoding = "CP949", encoding = "UTF-8")
+df_pops_seoul <- df_pops_seoul[-1,]
+
+# 서울특별시 행 제외
+df_pops_seoul <- df_pops_seoul[df_pops_seoul$행정구역별.시군구.!='서울특별시',]
+
+# 
+df_pops_seoul_one <- df_pops_seoul %>%
+    gather(key="years",value="one_pops","X2015.1", "X2016.1", "X2017.1", "X2018.1") 
+
+df_pops_seoul_one <- subset(df_pops_seoul_one,select= -2:-5)
+
+df_pops_seoul_one$years <- df_pops_seoul_one$years %>%
+    substr(2,5)
+
+df_pops_seoul_one <- df_pops_seoul_one %>%
+    rename("one_house" = one_pops)
+
+df_pops_seoul_one$one_house<- 
+    df_pops_seoul_one$one_house %>%
+    sapply(as.character) %>%
+    sapply(as.numeric)
+
+df_pops_seoul_one <- df_pops_seoul_one %>%
+    group_by(years) %>%
+    mutate(비율 = one_house/sum(one_house))
+```
+
+### 서울특별시 내 구별 유기 동물 비율
+
+```{r, warning=F, message=F}
+# 서울특별시 1인 가구 비율
+
+# 서울특별시 선택
+df_seoul <- g_df %>%
+  filter(시도=='서울특별시')%>%
+  group_by(년도)
+
+# 컬럼명 수정  
+df_seoul <- df_seoul %>%
+  rename("관할기관" = 관활기간)
+
+# 공백으로 나눈 후 구 컬럼 추가
+df_seoul$구 <- sapply(str_split(df_seoul$관할기관," "),tail,1)
+
+# 사용하지 않는 컬럼 삭제
+df_seoul <- df_seoul[,-c(1,2,3,4,5)]
+
+# 서울특별시 유기 동물 수 확인
+df_seoul_sm <- df_seoul %>%
+  group_by(년도,구) %>%
+  summarise(count=n())
+
+# 구별 유기 동물 비율 확인
+df_seoul_sm <- df_seoul_sm %>%
+    group_by(년도) %>%
+    mutate(percentage = count/sum(count))
+```
+
+### 서울특별시 1인 가구와 유기 동물 간 상관관계 분석
+
+```{r, message=F, echo=T, include=T}
+# 서울특별시 내 구별 인구 수 및 1인 가구 비율과 유기 동물 비율 결합
+df_seoul_merged <- merge(df_seoul_sm,df_pops_seoul_one,by.x=c("구","년도"),by.y=c("행정구역별.시군구.","years"))
+
+names(df_seoul_merged)[names(df_seoul_merged)=="count"] <-"유기동물수"
+names(df_seoul_merged)[names(df_seoul_merged)=="비율"] <- "시군구별_1인가구_비율"
+names(df_seoul_merged)[names(df_seoul_merged)=="percentage"] <- "시군구별_유기동물_비율"
+
+# 상관지수
+cor(df_seoul_merged$시군구별_1인가구_비율,df_seoul_merged$시군구별_유기동물_비율)
+```
+
+```{r, echo=F, warning=F}
+# 시각화
+seoul_cor<-ggplot(df_seoul_merged,aes(시군구별_1인가구_비율,시군구별_유기동물_비율)) +
+    geom_point(colour = 'black') + 
+    ggtitle(label = '서울특별시') +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme_classic(base_family = "NanumBarunGothic") +
+    xlab('1인가구') +
+    stat_smooth(method=lm,col='red',geom='smooth',se=FALSE) +
+    scale_x_continuous(labels = scales::percent) + 
+    scale_y_continuous(labels = scales::percent)
+
+seoul_cor
+```
+
+# 결론
+
+## 가설 검증 결과
+경기도와 서울특별시의 1인 가구 비율과 유기 동물 증가의 상관관계는 각각 0.7487341와 0.6737634로 상관 관계가 있다. 
+
+## 유기 동물을 위한 정책
+
+### 동물 등록제 의무화
+* 내용 : 
+    * 2014년 1월 1일부터 **개**를 소유한 사람은 전국 시군구청에 반드시 동물 등록제 실시 → 등록 미비
+    * 2019년 9월 1일부터 3개월령 이상의 **개**를 동물 등록하지 않으면 과태료 100만원 부과
+    * 2018년 1월 15일부터 고양이 동물등록 시험사업 실시
+* 등록 방법 : 
+    * 내장형 무선식별장치 개체 삽입(고양이 가능)
+    * 외장형 무선식별장치 부착
+    * 동물인식표 부착
+
+출처:[동물보호관리시스템](https://www.animal.go.kr/portal_rnl/vicarious/public_info.jsp)
+
+### 서울특별시 동물 공존도시 서울 기본계획(2019)
+* 유기동물 안락사 제로화 사업 추진 
+    * 서울시 동물보호센터에서 유기견을 입양하면 약 20만원의 동물보험비 1년치를 지원
+    * 유기견 중증 질환 치료와 응급치료를 위해 응급구조 치료기관 지정 및 24시간 운영
+    * 길고양이 보호시스템 운영
+
+* 반려 동물 보호 정책
+    * 동물등록제 지원
+    * 저소득층 반려동물을 대상으로 예방접종비와 중성화 수술비를 지원
+
+### 경기도 동물사랑정책 추진계획 발표(2020)
+* 유기 동물 지원 정책
+    * 유실·유기동물 입양비 지원
+    * 길고양이 급식소 설치
+    * 4억원을 들여 반려동물 입양 카페를 만들어 운영
+
+* 반려 동물 보호 정책
+    * 동물등록제 지원
+    * 반려동물 보험가입 지원 
+
+## 결론
+
+뉴스 기사에서 유기 동물의 증가의 원인을 1인 가구의 증가를 꼽고 있으며,
+이번 분석을 통해 1인 가구와 유기 동물의 발생이 상관이 있다는 것을 알게되었다.
+
+최근 서울특별시와 경기도를 비롯한 지자체에서는 동물 보호 정책을 발표, 사업을 운영하고 있다. 사업 주요 내용은 이미 발생된 유기 동물에 대한 보호 및 입양으로
+유기 동물 예방을 위한 정책이 진행되지 않는 점이 아쉽다.
+
+1인 가구는 여러 구성원이 있는 가구에 비해 정서적이든 금전적이든 반려 동물을 제대로 돌보기 어려울 것이다. 사전에 이러한 내용을 인지할 수 있도록 동물 입양 시 의무 교육 이수가 필요할 것으로 보인다. 또한, 금전적인 이유로 동물을 유기하지 않도록 1인 가구끼리 장기 외출 시 반려 동물을 맡길 수 있는 매칭 프로그램을 운영하는 등의 이미 반려 동물을 키우고 있는 1인 가구 대상의 정책이 필요한 것으로 보인다. 
