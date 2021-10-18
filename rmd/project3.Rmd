@@ -55,7 +55,7 @@ library(XML)
 library(lubridate)
 
 #open api 인증키
-service_key <-'15PKRVa0527Ap7dvKbQOvC979eprNyZLi5a%2F4RNdtTOGAHUxQ0IqE%2FkfGLgMAG7%2FDPBnpINkhvWKtsX%2Fbkxc%2Fg%3D%3D'
+service_key <-''
 
 #open api url
 url <- 'http://openapi.animal.go.kr/openapi/service/rest/abandonmentPublicSrvc/abandonmentPublic?'
